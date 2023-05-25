@@ -21,6 +21,7 @@ use frontend\models\ContactForm;
 use yii\data\Pagination;
 use frontend\models\CommentForm;
 use frontend\models\Comment;
+use frontend\models\SearchComment;
 
 //ДОБАВИЛИ!
 /** @var yii\bootstrap5\ActiveForm $form */
