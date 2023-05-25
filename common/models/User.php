@@ -2,6 +2,7 @@
 
 namespace common\models;
 
+use frontend\models\Article;
 use Yii;
 use yii\base\NotSupportedException;
 use yii\behaviors\TimestampBehavior;
@@ -209,5 +210,25 @@ class User extends ActiveRecord implements IdentityInterface
     public function removePasswordResetToken()
     {
         $this->password_reset_token = null;
+    }
+
+    public function getCommentedArticles(){
+        $articles = Article::find()
+            ->select('article.*')
+            ->innerJoinWith('comment', true)
+            ->where(['comment.user_id'=> $this->getId()])
+            ->all();
+
+        return $articles;
+    }
+
+    public function getLikedArticles(){
+        $articles = Article::find()
+            ->select('article.*')
+            ->innerJoinWith('like', true)
+            ->where(['like.user_id'=> $this->getId()])
+            ->all();
+
+        return $articles;
     }
 }
