@@ -2,9 +2,12 @@
 
 namespace frontend\controllers;
 
+use frontend\models\Article;
+use frontend\models\Like;
 use frontend\models\ResendVerificationEmailForm;
 use frontend\models\VerifyEmailForm;
 use Yii;
+use yii\base\BaseObject;
 use yii\base\InvalidArgumentException;
 use yii\web\BadRequestHttpException;
 use yii\web\Controller;
@@ -15,16 +18,25 @@ use frontend\models\PasswordResetRequestForm;
 use frontend\models\ResetPasswordForm;
 use frontend\models\SignupForm;
 use frontend\models\ContactForm;
+use yii\data\Pagination;
+use frontend\models\CommentForm;
+use frontend\models\Comment;
 
 //ДОБАВИЛИ!
 /** @var yii\bootstrap5\ActiveForm $form */
 use yii\bootstrap5\ActiveForm;
+use yii\web\Response;
 
 /**
  * Site controller
  */
 class SiteController extends Controller
 {
+    public function beforeAction($action)
+    {
+        $this->enableCsrfValidation = false;
+        return parent::beforeAction($action);
+    }
     /**
      * {@inheritdoc}
      */
@@ -283,5 +295,150 @@ class SiteController extends Controller
         return $this->render('resendVerificationEmail', [
             'model' => $model
         ]);
+    }
+
+
+
+
+
+
+
+
+    public function actionArticles()
+    {
+        $category_id = Yii::$app->request->get('category_id');
+        $articles = Article::find()->orderBy('id');
+        if($category_id){
+            $articles=Article::find()->where(['category_id'=>$category_id]);
+        }
+
+        $pagination=new Pagination([
+            'defaultPageSize'=>6,
+            'totalCount'=>$articles->count()
+        ]);
+
+        $articles=$articles->offset($pagination->offset)->limit($pagination->limit)->all();
+
+        return $this->render('articles',['articles'=>$articles, 'pagination'=>$pagination]);
+    }
+
+    public function actionArticle()
+    {
+        $id = Yii::$app->request->get('id');
+        $article = Article::findOne($id);
+        $comments=$article->comment;
+        $commentForm=new CommentForm();
+
+
+        $commentModel = new Comment();
+
+        if ($commentModel->load(Yii::$app->request->post()))
+        {
+            $commentModel->article_id=$id;
+            $commentModel->user_id=Yii::$app->user->identity->Id;
+            if($commentModel->save()){
+                $commentModel = new Comment(); //reset model
+            }
+
+        }
+
+        $searchModel = new SearchComment();
+        $dataProvider=$searchModel->search(['SearchComment'=>['article_id'=>$id]]);
+
+        $user_id = Yii::$app->user->identity->Id;
+
+        $like = Like::findOne(['article_id' => $id, 'user_id' => $user_id]);
+
+        if ($like) {
+            $likeBeginState = 'toggled-on';
+        }
+        else{
+            $likeBeginState = 'toggled-off';
+        }
+
+        return $this->render('article',['article'=>$article,'comments'=>$comments,'commentModel'=>$commentModel,'searchModel'=>$searchModel, 'dataProvider'=>$dataProvider, 'likeBeginState'=>$likeBeginState]);
+    }
+
+    public function actionComment($article_id)
+    {
+        $user_id = Yii::$app->user->identity->id;
+        $form = new CommentForm();
+        if (Yii::$app->request->isAjax) {
+            Yii::$app->response->format = Response::FORMAT_JSON;
+            if ($form->load(Yii::$app->request->post()) && $form->validate()) {
+                $commentModel = new Comment();
+                $commentModel->content = $form->comment;
+                $commentModel->article_id = $article_id;
+                $commentModel->user_id = $user_id;
+
+                if ($commentModel->save()) {
+                    /*
+                    return $data = [
+                        'success' => true,
+                        'comment' => $form->comment,
+                    ];
+                    */
+
+                }
+            }
+        }
+    }
+
+    public function actionGetlikestate(){
+        if (Yii::$app->request->isAjax) {
+
+            $data = Yii::$app->request->post();
+            $article_id = $data['article_id'];
+            $user_id = Yii::$app->user->identity->Id;
+
+            $like = Like::findOne(['article_id' => $article_id, 'user_id' => $user_id]);
+
+            if ($like) {
+                $state = 'toggled-on';
+            }
+            else{
+                $state = 'toggled-off';
+            }
+
+            \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
+            return[
+                'state'=>$state
+            ];
+        }
+    }
+
+    public function actionTogglelike()
+    {
+
+        if (Yii::$app->request->isAjax) {
+
+            $data = Yii::$app->request->post();
+            $article_id= $data['article_id'];
+            $user_id = Yii::$app->user->identity->Id;
+
+            $like=Like::findOne(['article_id'=>$article_id,'user_id'=>$user_id]);
+            $message='like on';
+            $class_name='toggled-on';
+
+            if($like){
+                $message='there is like';
+                $class_name='toggled-off';
+                $like->delete();
+            }
+            else{
+                $message='there is no like';
+                $class_name='toggled-on';
+                $new_like = new Like();
+                $new_like->article_id = $article_id;
+                $new_like->user_id = $user_id;
+                $new_like->save();
+            }
+            \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
+            return [
+                'message' => $message,
+                'state'=>$class_name,
+                'code' => 100,
+            ];
+        }
     }
 }
